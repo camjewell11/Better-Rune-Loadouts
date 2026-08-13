@@ -36,10 +36,12 @@ import net.runelite.client.util.Text;
 public class BetterRuneLoadoutsPlugin extends Plugin
 {
 	private static final String RENAME_PROMPT_FORMAT = "%s<br>" + ColorUtil.prependColorTag("(Limit %s Characters)", new Color(0, 0, 170));
-	// The grid's name strip is much narrower than vanilla's original
-	// full-width single-column row it was sized for — anything past ~10
-	// characters overflows off the edge of the cell.
-	private static final int RENAME_CHARACTER_LIMIT = 10;
+	// The grid's name strip is narrower than vanilla's original full-width
+	// single-column row it was sized for. Raised to 15 after the cell
+	// rearrange (button + theme icons now share one row, freeing up width
+	// the name strip spans too) — anything past this still overflows off
+	// the edge of the cell.
+	private static final int RENAME_CHARACTER_LIMIT = 15;
 
 	@Inject
 	private Client client;

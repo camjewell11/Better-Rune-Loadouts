@@ -14,7 +14,12 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/MenuEntry.java\")",
       "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-client/src/main/java/net/runelite/client/plugins/devtools/WidgetInspector.java\")",
       "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-client/src/main/java/net/runelite/client/game/chatbox/ChatboxTextInput.java\")",
-      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-client/src/main/java/net/runelite/client/game/chatbox/ChatboxPanelManager.java\")"
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-client/src/main/java/net/runelite/client/game/chatbox/ChatboxPanelManager.java\")",
+      "Bash(./gradlew compileJava -q)",
+      "Bash(grep -n \"OnMouseOver\\\\|OnMouseLeave\\\\|OnMouseRepeat\\\\|OnMouseOverListener\\\\|MouseOver\\\\|MouseLeave\\\\|MouseRepeat\" /tmp/widget_extract/net/runelite/api/widgets/Widget.java)",
+      "Read(//tmp/widget_extract/net/runelite/api/widgets/**)",
+      "Bash(sed -n '2190,2290p' /tmp/sprite_extract/net/runelite/api/gameval/SpriteID.java)",
+      "Read(//tmp/sprite_extract/net/runelite/api/gameval/**)"
     ]
   }
 }

@@ -10,10 +10,14 @@ import net.runelite.api.gameval.SpriteID;
  */
 class RunePouchLoadoutIcon
 {
-	// Shown when a loadout has no custom icon set. Uses the same "X" sprite
-	// as the empty-icon-slot placeholder so the picker's "Default" preview
-	// matches what unselecting actually shows, rather than an unrelated icon.
-	static final int DEFAULT_SPRITE_ID = SpriteID.FavouriteIcons.REMOVE;
+	// Purely a sentinel value compared against to decide whether a slot is
+	// "unset" (RunePouchGridManager.applyIconSlot renders the actual unset
+	// placeholder as an item icon, not this sprite) — the only place this
+	// sprite is ever actually drawn is the picker's own "Default" grid
+	// entry, so it just needs to visually read as an X there. Confirmed via
+	// screenshot that FavouriteIcons.REMOVE (previously used here) renders
+	// as a heart, not an X — SpriteID.CROSS is the correct plain X mark.
+	static final int DEFAULT_SPRITE_ID = SpriteID.CROSS;
 	static final int NO_SECOND_ICON = -1;
 
 	final int spriteId;
