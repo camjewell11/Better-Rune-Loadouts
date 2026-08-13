@@ -158,6 +158,7 @@ class RunePouchLoadoutIcon
 		new RunePouchLoadoutIcon(SpriteID.LunarMagicOn.CATHERBY_TELEPORT, "Catherby Teleport"),
 		new RunePouchLoadoutIcon(SpriteID.LunarMagicOn.ICE_PLATEAU_TELEPORT, "Ice Plateau Teleport"),
 		new RunePouchLoadoutIcon(SpriteID.LunarMagicOn.OURANIA_TELEPORT, "Ourania Teleport"),
+		new RunePouchLoadoutIcon(SpriteID.LunarMagicOn.HUMIDIFY, "Humidify"),
 		new RunePouchLoadoutIcon(SpriteID.LunarMagicOn.SPELLBOOK_SWAP, "Spellbook Swap"),
 		new RunePouchLoadoutIcon(SpriteID.LunarMagicOn.DREAM, "Dream"),
 

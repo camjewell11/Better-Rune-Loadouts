@@ -198,7 +198,7 @@ class RunePouchGridManager
 			containerWidth = container.getWidth();
 		}
 
-		int usableWidth = containerWidth - RunePouchGridConst.SCROLLBAR_RESERVE;
+		int usableWidth = containerWidth - RunePouchGridConst.SCROLLBAR_RESERVE - RunePouchGridConst.CONTAINER_PADDING_X * 2;
 		int cellWidth = (usableWidth - RunePouchGridConst.CELL_GUTTER_X) / RunePouchGridConst.GRID_COLUMNS;
 
 		for (int i = 0; i < LOADOUT_WIDGET_IDS.length; i++)
@@ -218,15 +218,17 @@ class RunePouchGridManager
 			loadout.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
 			loadout.setWidthMode(WidgetSizeMode.ABSOLUTE);
 			loadout.setHeightMode(WidgetSizeMode.ABSOLUTE);
-			loadout.setOriginalX(col * (cellWidth + RunePouchGridConst.CELL_GUTTER_X));
+			loadout.setOriginalX(RunePouchGridConst.CONTAINER_PADDING_X + col * (cellWidth + RunePouchGridConst.CELL_GUTTER_X));
 			loadout.setOriginalY(row * (RunePouchGridConst.CELL_HEIGHT + RunePouchGridConst.CELL_GUTTER_Y));
 			loadout.setOriginalWidth(cellWidth);
 			loadout.setOriginalHeight(RunePouchGridConst.CELL_HEIGHT);
 			loadout.revalidate();
 
+			applyCellBackdrop(loadout, cellWidth);
+
 			applyLoadoutName(i);
-			applyLoadoutIcon(i);
-			compactRuneIcons(i);
+			applyLoadoutIcon(i, cellWidth);
+			compactRuneIcons(i, cellWidth);
 		}
 
 		int scrollHeight = RunePouchGridConst.GRID_ROWS * (RunePouchGridConst.CELL_HEIGHT + RunePouchGridConst.CELL_GUTTER_Y);
@@ -249,6 +251,31 @@ class RunePouchGridManager
 		}
 
 		gridApplied = true;
+	}
+
+	/**
+	 * Subtle fill behind the whole cell so adjacent loadouts read as
+	 * visually distinct blocks instead of blending into the container's own
+	 * background. Created first (before the name/button/icon slot/rune
+	 * children below), so it renders behind all of them rather than
+	 * covering them — dynamic children draw in creation order.
+	 */
+	private void applyCellBackdrop(Widget loadout, int cellWidth)
+	{
+		Widget backdrop = getOrCreateOwned(loadout, "brl-cell-backdrop", WidgetType.RECTANGLE);
+		backdrop.setFilled(true);
+		backdrop.setTextColor(0x000000);
+		backdrop.setOpacity(190);
+		backdrop.setWidthMode(WidgetSizeMode.ABSOLUTE);
+		backdrop.setHeightMode(WidgetSizeMode.ABSOLUTE);
+		backdrop.setOriginalWidth(cellWidth);
+		backdrop.setOriginalHeight(RunePouchGridConst.CELL_HEIGHT);
+		backdrop.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
+		backdrop.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
+		backdrop.setOriginalX(0);
+		backdrop.setOriginalY(0);
+		backdrop.setHidden(false);
+		backdrop.revalidate();
 	}
 
 	/**
@@ -287,7 +314,7 @@ class RunePouchGridManager
 
 			for (Widget child : children)
 			{
-				if (!child.isHidden() && child.getItemId() >= 0 && !ownedWidgets.containsValue(child))
+				if (!child.isHidden() && child.getItemId() >= 0 && isVanillaRendered(child))
 				{
 					child.setHidden(true);
 					child.revalidate();
@@ -325,9 +352,18 @@ class RunePouchGridManager
 			return;
 		}
 
+		Widget container = client.getWidget(InterfaceID.Bankside.RUNEPOUCH_LOADOUT_CONTAINER);
+		if (container == null)
+		{
+			return;
+		}
+
+		int usableWidth = container.getWidth() - RunePouchGridConst.SCROLLBAR_RESERVE - RunePouchGridConst.CONTAINER_PADDING_X * 2;
+		int cellWidth = (usableWidth - RunePouchGridConst.CELL_GUTTER_X) / RunePouchGridConst.GRID_COLUMNS;
+
 		for (int i = 0; i < LOADOUT_WIDGET_IDS.length; i++)
 		{
-			compactRuneIcons(i);
+			compactRuneIcons(i, cellWidth);
 		}
 	}
 
@@ -388,8 +424,7 @@ class RunePouchGridManager
 
 			for (Widget child : children)
 			{
-				boolean isOurs = ownedWidgets.containsValue(child);
-				child.setHidden(isOurs);
+				child.setHidden(!isVanillaRendered(child));
 				child.revalidate();
 			}
 		}
@@ -489,7 +524,7 @@ class RunePouchGridManager
 		nameWidget.revalidate();
 	}
 
-	private void applyLoadoutIcon(int slotIndex)
+	private void applyLoadoutIcon(int slotIndex, int cellWidth)
 	{
 		Widget loadWidget = client.getWidget(LOAD_WIDGET_IDS[slotIndex]);
 		Widget loadoutWidget = client.getWidget(LOADOUT_WIDGET_IDS[slotIndex]);
@@ -498,21 +533,26 @@ class RunePouchGridManager
 			return;
 		}
 
-		// Vanilla anchors this near the top of its original (shorter,
-		// full-width) row. Pin it explicitly below our name strip. Vertically
-		// centered against the combined height of the theme-icon + rune-icon
-		// rows beside it (rather than sharing their top edge) since the
-		// button, at its native size, is shorter than that combined span.
-		int rowsTop = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP;
-		int rowsHeight = RunePouchGridConst.CUSTOM_ICON_SIZE + RunePouchGridConst.RUNE_ROW_GAP + RunePouchGridConst.RUNE_ICON_SIZE;
-		int buttonY = rowsTop + (rowsHeight - RunePouchGridConst.LOAD_BUTTON_HEIGHT) / 2;
+		// Button + both theme icons together, centered as a group in the
+		// cell rather than left-aligned — row 1 of 2, with the rune icons
+		// in a full-width row beneath both (see compactRuneIcons()). The
+		// trailing ICON_BORDER_PADDING accounts for the second icon's
+		// border, which extends past its own right edge — without it here,
+		// centering only accounts for the icon graphics and the border
+		// pokes out past the intended margin on the right.
+		int row1Width = RunePouchGridConst.LOAD_BUTTON_WIDTH + RunePouchGridConst.BUTTON_ICON_GAP
+			+ RunePouchGridConst.CUSTOM_ICON_SIZE * 2 + RunePouchGridConst.CUSTOM_ICON_GUTTER
+			+ RunePouchGridConst.ICON_BORDER_PADDING;
+		int row1X = (cellWidth - row1Width) / 2;
+		int buttonX = row1X;
+		int buttonY = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP;
 
 		cacheOriginalGeometry(loadWidget);
 		loadWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
 		loadWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
 		loadWidget.setWidthMode(WidgetSizeMode.ABSOLUTE);
 		loadWidget.setHeightMode(WidgetSizeMode.ABSOLUTE);
-		loadWidget.setOriginalX(0);
+		loadWidget.setOriginalX(buttonX);
 		loadWidget.setOriginalY(buttonY);
 		loadWidget.setOriginalWidth(RunePouchGridConst.LOAD_BUTTON_WIDTH);
 		loadWidget.setOriginalHeight(RunePouchGridConst.LOAD_BUTTON_HEIGHT);
@@ -543,9 +583,11 @@ class RunePouchGridManager
 		// making our icon disappear or get buried on hover. Attaching to
 		// the loadout cell instead (a sibling, not nested in the button)
 		// avoids that entirely — this widget has no competing hover behavior.
-		int buttonTop = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP;
-		int iconY = buttonTop;
-		int iconX = RunePouchGridConst.THEME_ICON_X;
+		// Same row as the button, beside it — vertically centered against
+		// the button's height rather than sharing its top edge, since the
+		// icons are shorter than the button.
+		int iconY = buttonY + (RunePouchGridConst.LOAD_BUTTON_HEIGHT - RunePouchGridConst.CUSTOM_ICON_SIZE) / 2;
+		int iconX = buttonX + RunePouchGridConst.LOAD_BUTTON_WIDTH + RunePouchGridConst.BUTTON_ICON_GAP;
 
 		applyIconSlot(loadoutWidget, ICON_CHILD_NAME, iconX, iconY, RunePouchGridConst.CUSTOM_ICON_SIZE, primarySprite, isCustomPrimary, slotIndex, 0);
 
@@ -610,16 +652,15 @@ class RunePouchGridManager
 	 */
 	private void applyIconSlot(Widget parent, String tag, int x, int y, int size, int spriteId, boolean isSet, int slotIndex, int layer)
 	{
-		// Subtle dark backdrop panel so the slot reads as a distinct target
-		// even before an icon is set. RECTANGLE children do render here fine
-		// (confirmed with bold debug styling) — the earlier "not visible"
-		// attempts were just too faint/dark against the UI's own dark
-		// background, not a rendering failure.
+		// Black outline (not a filled backdrop — the whole cell has its own
+		// backdrop now, see applyCellBackdrop()) so the slot still reads as
+		// a distinct target even before an icon is set.
 		int padding = RunePouchGridConst.ICON_BORDER_PADDING;
 		Widget border = getOrCreateOwned(parent, tag + "-border", WidgetType.RECTANGLE);
-		border.setFilled(true);
+		border.setFilled(false);
+		border.setBorderType(1);
 		border.setTextColor(0x000000);
-		border.setOpacity(100);
+		border.setOpacity(0);
 		border.setWidthMode(WidgetSizeMode.ABSOLUTE);
 		border.setHeightMode(WidgetSizeMode.ABSOLUTE);
 		border.setOriginalWidth(size + padding * 2);
@@ -689,11 +730,12 @@ class RunePouchGridManager
 	 * them sticks, but any reposition we apply gets silently overwritten.
 	 * So instead: read which item each one shows (before hiding it), then
 	 * draw our own replacement icons — plain widgets vanilla's script has no
-	 * reason to touch — in a compact grid to the right of the theme icons.
-	 * Each replacement forwards clicks to the original (still-present, just
-	 * hidden) widget's own action, so the vanilla rune picker still opens.
+	 * reason to touch — in a full-width row beneath the load button/theme
+	 * icon row. Each replacement forwards clicks to the original
+	 * (still-present, just hidden) widget's own action, so the vanilla rune
+	 * picker still opens.
 	 */
-	private void compactRuneIcons(int slotIndex)
+	private void compactRuneIcons(int slotIndex, int cellWidth)
 	{
 		Widget loadoutWidget = client.getWidget(LOADOUT_WIDGET_IDS[slotIndex]);
 		if (loadoutWidget == null)
@@ -710,7 +752,7 @@ class RunePouchGridManager
 		List<Widget> originals = new ArrayList<>();
 		for (Widget child : children)
 		{
-			if (ownedWidgets.containsValue(child))
+			if (!isVanillaRendered(child))
 			{
 				continue;
 			}
@@ -727,19 +769,20 @@ class RunePouchGridManager
 			child.revalidate();
 		}
 
-		int buttonTop = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP;
+		// Row 1 (button + theme icons) is as tall as the taller of the two;
+		// the rune row sits beneath both, spanning and centered within the
+		// full cell width — its width varies with how many runes this
+		// loadout actually has saved, so the centering offset is computed
+		// per-loadout rather than being a constant.
+		int row1Top = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP;
+		int row1Height = Math.max(RunePouchGridConst.LOAD_BUTTON_HEIGHT, RunePouchGridConst.CUSTOM_ICON_SIZE);
+		int runeRowY = row1Top + row1Height + RunePouchGridConst.RUNE_ROW_GAP;
 
-		// Center the rune row under the theme-icon row above it, rather than
-		// left-aligning to a fixed X — the theme row is always 2 fixed-size
-		// icons, but the rune row's width varies with how many runes this
-		// loadout actually has saved, so the centering offset has to be
-		// computed per-loadout instead of being a constant.
 		int shownCount = Math.min(originals.size(), RunePouchGridConst.RUNE_ICON_MAX_SLOTS);
-		int themeRowWidth = RunePouchGridConst.CUSTOM_ICON_SIZE * 2 + RunePouchGridConst.CUSTOM_ICON_GUTTER;
 		int runeRowWidth = shownCount > 0
 			? shownCount * RunePouchGridConst.RUNE_ICON_SIZE + (shownCount - 1) * RunePouchGridConst.RUNE_ICON_GUTTER
 			: 0;
-		int runeRowX = RunePouchGridConst.THEME_ICON_X + (themeRowWidth - runeRowWidth) / 2;
+		int runeRowX = (cellWidth - runeRowWidth) / 2;
 
 		for (int i = 0; i < RunePouchGridConst.RUNE_ICON_MAX_SLOTS; i++)
 		{
@@ -754,9 +797,6 @@ class RunePouchGridManager
 			}
 
 			Widget original = originals.get(i);
-
-			// Single row below the theme-icon row, centered under it.
-			int runeRowY = buttonTop + RunePouchGridConst.CUSTOM_ICON_SIZE + RunePouchGridConst.RUNE_ROW_GAP;
 
 			runeIcon.setItemId(original.getItemId());
 			runeIcon.setItemQuantity(1);
@@ -810,6 +850,24 @@ class RunePouchGridManager
 
 		int cap = client.getVarbitValue(caps[position]);
 		return cap > 0 ? String.format(" (%,d)", cap) : "";
+	}
+
+	/**
+	 * True for vanilla's own rendered widgets (its rune-icon children always
+	 * have a real item name set, e.g. "Cosmic rune" — that's how their
+	 * native tooltips work), false for ours (never named). Used instead of
+	 * ownedWidgets.containsValue()'s reference-identity check for telling
+	 * "vanilla's" from "ours" apart: a rune-picker interaction — even one
+	 * that's cancelled — can make vanilla rebuild this loadout's dynamic
+	 * children with fresh Widget objects, which breaks reference-based
+	 * matching (our own previously-created replacement icons then get
+	 * misidentified as new vanilla originals and double up in the rune
+	 * row) but doesn't change this naming distinction.
+	 */
+	private static boolean isVanillaRendered(Widget child)
+	{
+		String name = child.getName();
+		return name != null && !name.isEmpty();
 	}
 
 	private Widget getOrCreateOwned(Widget parent, String tag, int type)
