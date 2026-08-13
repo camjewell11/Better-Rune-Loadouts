@@ -1,5 +1,7 @@
 # Better Rune Loadouts
 
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://paypal.me/camjewell)
+
 A [RuneLite](https://runelite.net/) plugin that redesigns the rune pouch's
 Load-outs popup — opened by clicking the pouch while the bank is open — from
 vanilla's single-column list of buttons into a compact 2-column icon grid.
