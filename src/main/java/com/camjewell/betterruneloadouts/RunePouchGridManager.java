@@ -252,6 +252,86 @@ class RunePouchGridManager
 	}
 
 	/**
+	 * Cheap per-tick correction for the two things vanilla actively keeps
+	 * fighting us on — re-showing its own rune-icon widgets (compactRuneIcons
+	 * hides them, but vanilla can re-show them at any time, not just on
+	 * open) and enlarging the Load button's decorative children on hover.
+	 * Called every PostClientTick while the panel is open (see
+	 * BetterRuneLoadoutsPlugin) instead of the full applyGrid() — cell
+	 * position, name text, and custom icon slots are static once applied
+	 * and vanilla never touches them, so re-writing those every 20ms would
+	 * be pure waste. This only writes when something's actually drifted, so
+	 * the steady-state cost (no interference this tick) is just cheap
+	 * isHidden()/geometry reads.
+	 */
+	void suppressVanillaInterference()
+	{
+		if (!gridApplied)
+		{
+			return;
+		}
+
+		for (int widgetId : LOADOUT_WIDGET_IDS)
+		{
+			Widget loadoutWidget = client.getWidget(widgetId);
+			if (loadoutWidget == null)
+			{
+				continue;
+			}
+
+			Widget[] children = loadoutWidget.getDynamicChildren();
+			if (children == null)
+			{
+				continue;
+			}
+
+			for (Widget child : children)
+			{
+				if (!child.isHidden() && child.getItemId() >= 0 && !ownedWidgets.containsValue(child))
+				{
+					child.setHidden(true);
+					child.revalidate();
+				}
+			}
+		}
+
+		for (int widgetId : LOAD_WIDGET_IDS)
+		{
+			Widget loadWidget = client.getWidget(widgetId);
+			if (loadWidget != null)
+			{
+				pinLoadButtonChildren(loadWidget);
+			}
+		}
+	}
+
+	/**
+	 * Re-reads each loadout's actual rune contents (type + saved quantity)
+	 * and rebuilds the compact rune-icon row/hover text from them. Unlike
+	 * suppressVanillaInterference() this isn't fighting vanilla re-showing
+	 * anything — it's picking up edits the player just made through
+	 * vanilla's own rune picker (which we forward clicks to, so we don't
+	 * get a direct callback when it saves). Called once per real game tick
+	 * (600ms) rather than every client tick: content edits aren't a
+	 * hover-speed concern the way the flicker was, and re-deriving the
+	 * originals list plus rewiring each icon's action/listener per loadout
+	 * is real work, not the near-free geometry checks in
+	 * suppressVanillaInterference().
+	 */
+	void refreshRuneContents()
+	{
+		if (!gridApplied)
+		{
+			return;
+		}
+
+		for (int i = 0; i < LOADOUT_WIDGET_IDS.length; i++)
+		{
+			compactRuneIcons(i);
+		}
+	}
+
+	/**
 	 * Re-renders names/icons from the config store without touching layout —
 	 * used after the user renames a loadout or changes its icon.
 	 */
@@ -501,6 +581,17 @@ class RunePouchGridManager
 				child.getOriginalX(),
 				child.getOriginalY(),
 			});
+
+			// Called every client tick (see RunePouchGridManager's tick-vs-open
+			// split) to catch vanilla's hover-grow the moment it happens, so
+			// skip the write+revalidate entirely when nothing's actually
+			// drifted — keeps the common case (every tick where hover hasn't
+			// touched this button) essentially free.
+			if (child.getOriginalWidth() == original[0] && child.getOriginalHeight() == original[1]
+				&& child.getOriginalX() == original[2] && child.getOriginalY() == original[3])
+			{
+				continue;
+			}
 
 			child.setOriginalWidth(original[0]);
 			child.setOriginalHeight(original[1]);

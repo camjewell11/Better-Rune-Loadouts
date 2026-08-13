@@ -12,6 +12,7 @@ import net.runelite.api.Menu;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.MenuOpened;
+import net.runelite.api.events.PostClientTick;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarbitID;
@@ -60,10 +61,18 @@ public class BetterRuneLoadoutsPlugin extends Plugin
 	// Vanilla re-populates the rune-icon widgets (undoing our hide) not just
 	// once on open but on other actions too, e.g. clicking Load — there's no
 	// single event to hook for "vanilla just touched these widgets again".
-	// So instead of guessing every trigger, keep reapplying every real game
-	// tick for as long as the panel stays open; applyGrid() is idempotent
-	// widget-property sets, cheap enough to redo this often while a menu is
-	// actually open.
+	// So instead of guessing every trigger, keep correcting every client
+	// tick for as long as the panel stays open via
+	// gridManager.suppressVanillaInterference() — a lightweight pass that
+	// only touches the specific things vanilla keeps fighting us on and
+	// skips writing when nothing's drifted, unlike the full applyGrid()
+	// (cell/name/icon layout, only needed on open or rename/icon-change).
+	// PostClientTick specifically (not GameTick, ~600ms, or ClientTick,
+	// before clientscript execution) — per RuneLite's own docs, vanilla's
+	// clientscripts run *during* the client tick, before PostClientTick
+	// fires at its very end, so correcting there overwrites whatever
+	// vanilla just did before that frame renders, instead of leaving up to
+	// 600ms of visible flicker between GameTick corrections.
 	private boolean runepouchPanelOpen;
 
 	@Provides
@@ -119,6 +128,22 @@ public class BetterRuneLoadoutsPlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onPostClientTick(PostClientTick event)
+	{
+		if (!runepouchPanelOpen)
+		{
+			return;
+		}
+
+		gridManager.suppressVanillaInterference();
+	}
+
+	// Picks up rune type/quantity edits the player just made through
+	// vanilla's own rune picker (clicks are forwarded there, so there's no
+	// direct callback when it saves). Real game ticks (600ms) are plenty
+	// responsive for that — it's not a hover-speed concern the way the
+	// flicker suppression above is, so this doesn't need PostClientTick.
+	@Subscribe
 	public void onGameTick(GameTick event)
 	{
 		if (!runepouchPanelOpen)
@@ -126,7 +151,7 @@ public class BetterRuneLoadoutsPlugin extends Plugin
 			return;
 		}
 
-		gridManager.applyGrid(lastViewValue);
+		gridManager.refreshRuneContents();
 	}
 
 	@Subscribe
