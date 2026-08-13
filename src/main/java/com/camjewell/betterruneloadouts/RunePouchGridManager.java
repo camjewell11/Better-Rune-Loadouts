@@ -769,6 +769,20 @@ class RunePouchGridManager
 			child.revalidate();
 		}
 
+		// Regular (non-divine) rune pouches only support 3 rune types — a
+		// loadout saved back when a divine pouch was equipped can still have
+		// a real 4th rune recorded (confirmed via logging: all 4 slots'
+		// widgets keep real data regardless of which pouch is currently
+		// equipped), but that data can't actually be loaded into the
+		// current pouch. Force position 4 to a disabled placeholder rather
+		// than showing real-looking data that doesn't work, matching
+		// vanilla's own view-container value (3 = regular, confirmed via
+		// logging) rather than trying to detect pouch tier from the widget
+		// data itself.
+		boolean regularPouch = currentViewValue == 3;
+		int maxRealSlots = Math.min(originals.size(), regularPouch ? 3 : RunePouchGridConst.RUNE_ICON_MAX_SLOTS);
+		int totalSlots = regularPouch ? 4 : maxRealSlots;
+
 		// Row 1 (button + theme icons) is as tall as the taller of the two;
 		// the rune row sits beneath both, spanning and centered within the
 		// full cell width — its width varies with how many runes this
@@ -778,21 +792,35 @@ class RunePouchGridManager
 		int row1Height = Math.max(RunePouchGridConst.LOAD_BUTTON_HEIGHT, RunePouchGridConst.CUSTOM_ICON_SIZE);
 		int runeRowY = row1Top + row1Height + RunePouchGridConst.RUNE_ROW_GAP;
 
-		int shownCount = Math.min(originals.size(), RunePouchGridConst.RUNE_ICON_MAX_SLOTS);
-		int runeRowWidth = shownCount > 0
-			? shownCount * RunePouchGridConst.RUNE_ICON_SIZE + (shownCount - 1) * RunePouchGridConst.RUNE_ICON_GUTTER
+		int runeRowWidth = totalSlots > 0
+			? totalSlots * RunePouchGridConst.RUNE_ICON_SIZE + (totalSlots - 1) * RunePouchGridConst.RUNE_ICON_GUTTER
 			: 0;
 		int runeRowX = (cellWidth - runeRowWidth) / 2;
 
 		for (int i = 0; i < RunePouchGridConst.RUNE_ICON_MAX_SLOTS; i++)
 		{
 			Widget runeIcon = getOrCreateOwned(loadoutWidget, RUNE_ICON_CHILD_PREFIX + i, WidgetType.GRAPHIC);
+			int runeIconX = runeRowX + i * (RunePouchGridConst.RUNE_ICON_SIZE + RunePouchGridConst.RUNE_ICON_GUTTER);
 
-			if (i >= originals.size())
+			boolean disabledFourthSlot = regularPouch && i == 3;
+
+			if (disabledFourthSlot || i >= maxRealSlots)
 			{
-				runeIcon.setHasListener(false);
-				runeIcon.setHidden(true);
-				runeIcon.revalidate();
+				if (disabledFourthSlot && i < originals.size())
+				{
+					// A real 4th rune is still recorded (e.g. saved back when
+					// a divine pouch was equipped) but can't actually be
+					// loaded with the current (regular, 3-slot) pouch — show
+					// it greyed out rather than a generic placeholder, so the
+					// player can still see what it *was* set to.
+					renderGreyedRuneSlot(runeIcon, originals.get(i), runeIconX, runeRowY);
+				}
+				else
+				{
+					runeIcon.setHasListener(false);
+					runeIcon.setHidden(true);
+					runeIcon.revalidate();
+				}
 				continue;
 			}
 
@@ -807,9 +835,9 @@ class RunePouchGridManager
 			runeIcon.setOriginalHeight(RunePouchGridConst.RUNE_ICON_SIZE);
 			runeIcon.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
 			runeIcon.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
-			int runeIconX = runeRowX + i * (RunePouchGridConst.RUNE_ICON_SIZE + RunePouchGridConst.RUNE_ICON_GUTTER);
 			runeIcon.setOriginalX(runeIconX);
 			runeIcon.setOriginalY(runeRowY);
+			runeIcon.setOpacity(0);
 			runeIcon.setHidden(false);
 
 			// Vanilla's own click action opens its native rune picker on the
@@ -833,6 +861,32 @@ class RunePouchGridManager
 			});
 			runeIcon.revalidate();
 		}
+	}
+
+	/**
+	 * Shows a rune saved to a regular pouch's unusable 4th slot (e.g. from
+	 * back when a divine pouch was equipped) faded and non-interactive —
+	 * the player can still see what it was set to, but can't click/right-
+	 * click to change it since it can't actually be loaded.
+	 */
+	private void renderGreyedRuneSlot(Widget runeIcon, Widget original, int x, int y)
+	{
+		runeIcon.setItemId(original.getItemId());
+		runeIcon.setItemQuantity(1);
+		runeIcon.setItemQuantityMode(ItemQuantityMode.NEVER);
+		runeIcon.setWidthMode(WidgetSizeMode.ABSOLUTE);
+		runeIcon.setHeightMode(WidgetSizeMode.ABSOLUTE);
+		runeIcon.setOriginalWidth(RunePouchGridConst.RUNE_ICON_SIZE);
+		runeIcon.setOriginalHeight(RunePouchGridConst.RUNE_ICON_SIZE);
+		runeIcon.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
+		runeIcon.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
+		runeIcon.setOriginalX(x);
+		runeIcon.setOriginalY(y);
+		runeIcon.setOpacity(160);
+		runeIcon.setHidden(false);
+		runeIcon.setHasListener(false);
+		runeIcon.clearActions();
+		runeIcon.revalidate();
 	}
 
 	/**
