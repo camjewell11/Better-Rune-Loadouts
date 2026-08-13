@@ -3,7 +3,12 @@
     "allow": [
       "Bash(./gradlew run *)",
       "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/WidgetPositionMode.java\")",
-      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/WidgetSizeMode.java\")"
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/WidgetSizeMode.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/DapperMickie/runepouch-loadout-names/master/src/main/java/com/github/dappermickie/runepouch/loadout/names/RunepouchLoadoutIcon.java\")",
+      "Read(//tmp/**)",
+      "Read(//c/tmp/**)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/Widget.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/ItemQuantityMode.java\")"
     ]
   }
 }
