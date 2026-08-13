@@ -91,6 +91,13 @@ class RunePouchGridManager
 	// identity (not Name) is also how we tell "ours" apart from vanilla's
 	// own children when hiding/restoring.
 	private final Map<String, Widget> ownedWidgets = new HashMap<>();
+	// Vanilla's own Load-button decorations (a hover-glow border, confirmed
+	// via debug logging) grow a couple pixels on mouseover and never shrink
+	// back, which reads as the whole button growing in our tightly-spaced
+	// grid. Caches each decoration's first-seen (un-hovered) geometry, keyed
+	// by "loadWidgetId:childIndex", so it can be pinned back every tick the
+	// same way applyLoadoutIcon already pins the button itself.
+	private final Map<String, int[]> loadButtonChildGeometry = new HashMap<>();
 	private boolean gridApplied;
 	private int currentViewValue;
 	private IntConsumer renameRequestHandler;
@@ -147,7 +154,30 @@ class RunePouchGridManager
 			return;
 		}
 
-		int cellWidth = (containerWidth - RunePouchGridConst.CELL_GUTTER_X) / RunePouchGridConst.GRID_COLUMNS;
+		// Confirmed via logging: the container itself (170px) sits inside a
+		// wider frame (190px) — vanilla's own static reservation for the
+		// scrollbar track, independent of the scrollbar widget's visibility.
+		// Since we hide that scrollbar entirely (below), widen the container
+		// to match the frame and reclaim that space instead of leaving it as
+		// dead margin down the right edge.
+		// Confirmed via logging: the container itself (170px) sits inside a
+		// wider frame (190px) — vanilla's own static reservation for the
+		// scrollbar track, independent of the scrollbar widget's visibility.
+		// Since we hide that scrollbar entirely (below), widen the container
+		// to match the frame and reclaim that space instead of leaving it as
+		// dead margin down the right edge.
+		Widget frame = client.getWidget(InterfaceID.Bankside.RUNEPOUCH_FRAME);
+		if (frame != null && frame.getWidth() > containerWidth)
+		{
+			cacheOriginalGeometry(container);
+			container.setWidthMode(WidgetSizeMode.ABSOLUTE);
+			container.setOriginalWidth(frame.getWidth());
+			container.revalidate();
+			containerWidth = container.getWidth();
+		}
+
+		int usableWidth = containerWidth - RunePouchGridConst.SCROLLBAR_RESERVE;
+		int cellWidth = (usableWidth - RunePouchGridConst.CELL_GUTTER_X) / RunePouchGridConst.GRID_COLUMNS;
 
 		for (int i = 0; i < LOADOUT_WIDGET_IDS.length; i++)
 		{
@@ -185,6 +215,17 @@ class RunePouchGridManager
 		}
 		container.revalidateScroll();
 
+		// Hidden rather than repositioned/resized — reclaims the width it
+		// occupied for content instead of just reserving space around it.
+		// Scroll wheel/drag still works since it's driven by the container's
+		// own scroll state, not by this widget's visibility.
+		Widget scrollbar = client.getWidget(InterfaceID.Bankside.RUNEPOUCH_LOADOUT_SCROLLBAR);
+		if (scrollbar != null)
+		{
+			scrollbar.setHidden(true);
+			scrollbar.revalidate();
+		}
+
 		gridApplied = true;
 	}
 
@@ -220,6 +261,14 @@ class RunePouchGridManager
 		restoreGeometry(LOADOUT_WIDGET_IDS);
 		restoreGeometry(LOAD_WIDGET_IDS);
 		restoreGeometry(NAME_WIDGET_IDS);
+		restoreGeometry(new int[]{InterfaceID.Bankside.RUNEPOUCH_LOADOUT_CONTAINER});
+
+		Widget scrollbar = client.getWidget(InterfaceID.Bankside.RUNEPOUCH_LOADOUT_SCROLLBAR);
+		if (scrollbar != null)
+		{
+			scrollbar.setHidden(false);
+			scrollbar.revalidate();
+		}
 
 		for (int widgetId : LOADOUT_WIDGET_IDS)
 		{
@@ -245,6 +294,7 @@ class RunePouchGridManager
 
 		originalGeometry.clear();
 		ownedWidgets.clear();
+		loadButtonChildGeometry.clear();
 		gridApplied = false;
 	}
 
@@ -347,18 +397,37 @@ class RunePouchGridManager
 		}
 
 		// Vanilla anchors this near the top of its original (shorter,
-		// full-width) row. Pin it explicitly below our name strip so it
-		// doesn't overlap that widget's clickable area.
+		// full-width) row. Pin it explicitly below our name strip. Vertically
+		// centered against the combined height of the theme-icon + rune-icon
+		// rows beside it (rather than sharing their top edge) since the
+		// button, at its native size, is shorter than that combined span.
+		int rowsTop = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP;
+		int rowsHeight = RunePouchGridConst.CUSTOM_ICON_SIZE + RunePouchGridConst.RUNE_ROW_GAP + RunePouchGridConst.RUNE_ICON_SIZE;
+		int buttonY = rowsTop + (rowsHeight - RunePouchGridConst.LOAD_BUTTON_HEIGHT) / 2;
+
 		cacheOriginalGeometry(loadWidget);
 		loadWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
 		loadWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
 		loadWidget.setWidthMode(WidgetSizeMode.ABSOLUTE);
 		loadWidget.setHeightMode(WidgetSizeMode.ABSOLUTE);
 		loadWidget.setOriginalX(0);
-		loadWidget.setOriginalY(RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP);
+		loadWidget.setOriginalY(buttonY);
 		loadWidget.setOriginalWidth(RunePouchGridConst.LOAD_BUTTON_WIDTH);
 		loadWidget.setOriginalHeight(RunePouchGridConst.LOAD_BUTTON_HEIGHT);
 		loadWidget.revalidate();
+		pinLoadButtonChildren(loadWidget);
+
+		// Pinning children fights the hover-grow after the fact (and can lag
+		// a tick behind since vanilla's hover script re-fires far more often
+		// than our GameTick correction), so it still visibly grew and shrank
+		// while hovering. Neutralize the growth at the source instead by
+		// replacing vanilla's own hover listeners with no-ops — this doesn't
+		// touch the Load click action, which is driven by the widget's
+		// Action[] entries and MenuEntryAdded, not by these listeners.
+		loadWidget.setHasListener(true);
+		loadWidget.setOnMouseOverListener((JavaScriptCallback) (ScriptEvent event) -> {});
+		loadWidget.setOnMouseRepeatListener((JavaScriptCallback) (ScriptEvent event) -> {});
+		loadWidget.setOnMouseLeaveListener((JavaScriptCallback) (ScriptEvent event) -> {});
 
 		int primarySprite = configStore.getIcon(currentViewValue, slotIndex, 0, RunePouchLoadoutIcon.DEFAULT_SPRITE_ID);
 		int layerSprite = configStore.getIcon(currentViewValue, slotIndex, 1, RunePouchLoadoutIcon.NO_SECOND_ICON);
@@ -384,19 +453,71 @@ class RunePouchGridManager
 	}
 
 	/**
+	 * Vanilla's Load button has its own dynamic children — a hover-glow
+	 * border among them — that a native script enlarges by a couple pixels
+	 * on mouseover and never shrinks back (confirmed via debug logging: two
+	 * of them grew from 9x14/12x9 to 9x16/14x9 and stayed there after the
+	 * mouse moved away). In our tightly-spaced grid that reads as the whole
+	 * button growing. Cache each child's first-seen (un-hovered) geometry
+	 * and pin it back every tick, the same way the button itself is pinned.
+	 */
+	private void pinLoadButtonChildren(Widget loadWidget)
+	{
+		Widget[] children = loadWidget.getDynamicChildren();
+		if (children == null)
+		{
+			return;
+		}
+
+		for (int i = 0; i < children.length; i++)
+		{
+			Widget child = children[i];
+			String key = loadWidget.getId() + ":" + i;
+			int[] original = loadButtonChildGeometry.computeIfAbsent(key, k -> new int[]{
+				child.getOriginalWidth(),
+				child.getOriginalHeight(),
+				child.getOriginalX(),
+				child.getOriginalY(),
+			});
+
+			child.setOriginalWidth(original[0]);
+			child.setOriginalHeight(original[1]);
+			child.setOriginalX(original[2]);
+			child.setOriginalY(original[3]);
+			child.revalidate();
+		}
+	}
+
+	/**
 	 * Renders one custom icon slot — the real sprite when set, or vanilla's
 	 * own "no rune assigned" item icon (11526) as a placeholder when not, so
 	 * it reads the same as the rest of this interface. Clicking (either
 	 * button, matching how a single action shows for both) opens the icon
 	 * picker for this slot/layer.
-	 *
-	 * TODO: a backdrop panel behind the slot (so it's visible even before
-	 * being set) would help, but RECTANGLE children attached here didn't
-	 * render under any configuration tried (outline or filled) despite every
-	 * GRAPHIC child working fine — needs more investigation, not a quick fix.
 	 */
 	private void applyIconSlot(Widget parent, String tag, int x, int y, int size, int spriteId, boolean isSet, int slotIndex, int layer)
 	{
+		// Subtle dark backdrop panel so the slot reads as a distinct target
+		// even before an icon is set. RECTANGLE children do render here fine
+		// (confirmed with bold debug styling) — the earlier "not visible"
+		// attempts were just too faint/dark against the UI's own dark
+		// background, not a rendering failure.
+		int padding = RunePouchGridConst.ICON_BORDER_PADDING;
+		Widget border = getOrCreateOwned(parent, tag + "-border", WidgetType.RECTANGLE);
+		border.setFilled(true);
+		border.setTextColor(0x000000);
+		border.setOpacity(100);
+		border.setWidthMode(WidgetSizeMode.ABSOLUTE);
+		border.setHeightMode(WidgetSizeMode.ABSOLUTE);
+		border.setOriginalWidth(size + padding * 2);
+		border.setOriginalHeight(size + padding * 2);
+		border.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
+		border.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
+		border.setOriginalX(x - padding);
+		border.setOriginalY(y - padding);
+		border.setHidden(false);
+		border.revalidate();
+
 		Widget icon = getOrCreateOwned(parent, tag, WidgetType.GRAPHIC);
 		if (isSet)
 		{
@@ -495,6 +616,18 @@ class RunePouchGridManager
 
 		int buttonTop = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP;
 
+		// Center the rune row under the theme-icon row above it, rather than
+		// left-aligning to a fixed X — the theme row is always 2 fixed-size
+		// icons, but the rune row's width varies with how many runes this
+		// loadout actually has saved, so the centering offset has to be
+		// computed per-loadout instead of being a constant.
+		int shownCount = Math.min(originals.size(), RunePouchGridConst.RUNE_ICON_MAX_SLOTS);
+		int themeRowWidth = RunePouchGridConst.CUSTOM_ICON_SIZE * 2 + RunePouchGridConst.CUSTOM_ICON_GUTTER;
+		int runeRowWidth = shownCount > 0
+			? shownCount * RunePouchGridConst.RUNE_ICON_SIZE + (shownCount - 1) * RunePouchGridConst.RUNE_ICON_GUTTER
+			: 0;
+		int runeRowX = RunePouchGridConst.THEME_ICON_X + (themeRowWidth - runeRowWidth) / 2;
+
 		for (int i = 0; i < RunePouchGridConst.RUNE_ICON_MAX_SLOTS; i++)
 		{
 			Widget runeIcon = getOrCreateOwned(loadoutWidget, RUNE_ICON_CHILD_PREFIX + i, WidgetType.GRAPHIC);
@@ -509,8 +642,7 @@ class RunePouchGridManager
 
 			Widget original = originals.get(i);
 
-			// Single row starting at the same X as the theme icons (to the
-			// right of the load button), below the theme-icon row.
+			// Single row below the theme-icon row, centered under it.
 			int runeRowY = buttonTop + RunePouchGridConst.CUSTOM_ICON_SIZE + RunePouchGridConst.RUNE_ROW_GAP;
 
 			runeIcon.setItemId(original.getItemId());
@@ -522,8 +654,8 @@ class RunePouchGridManager
 			runeIcon.setOriginalHeight(RunePouchGridConst.RUNE_ICON_SIZE);
 			runeIcon.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
 			runeIcon.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
-			runeIcon.setOriginalX(RunePouchGridConst.RUNE_AREA_X
-				+ i * (RunePouchGridConst.RUNE_ICON_SIZE + RunePouchGridConst.RUNE_ICON_GUTTER));
+			int runeIconX = runeRowX + i * (RunePouchGridConst.RUNE_ICON_SIZE + RunePouchGridConst.RUNE_ICON_GUTTER);
+			runeIcon.setOriginalX(runeIconX);
 			runeIcon.setOriginalY(runeRowY);
 			runeIcon.setHidden(false);
 
