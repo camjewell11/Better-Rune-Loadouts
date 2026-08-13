@@ -14,6 +14,7 @@ import net.runelite.api.FontID;
 import net.runelite.api.MenuAction;
 import net.runelite.api.ScriptEvent;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.ItemQuantityMode;
 import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.widgets.Widget;
@@ -77,6 +78,27 @@ class RunePouchGridManager
 		InterfaceID.Bankside.RUNEPOUCH_NAME_H,
 		InterfaceID.Bankside.RUNEPOUCH_NAME_I,
 		InterfaceID.Bankside.RUNEPOUCH_NAME_J,
+	};
+
+	// Per-loadout, per-rune-position (1-4) saved quantity cap. Confirmed via
+	// logging: e.g. RUNE_POUCH_LOADOUT_A_CAP1 read 1000 after saving a
+	// loadout with Cosmic rune capped at 1000, and 0 for a rune saved as
+	// unlimited ("All"). Position 3 (index 2) for loadouts D and H is -1
+	// (unavailable) because that one cap is split across extra bits
+	// (_BITSA/_BITSB/_BITSC) whose combination formula isn't derivable from
+	// the gameval constants alone — quantity is skipped just for that slot
+	// rather than risk showing a wrong number.
+	private static final int[][] RUNE_CAP_VARBIT_IDS = {
+		{VarbitID.RUNE_POUCH_LOADOUT_A_CAP1, VarbitID.RUNE_POUCH_LOADOUT_A_CAP2, VarbitID.RUNE_POUCH_LOADOUT_A_CAP3, VarbitID.RUNE_POUCH_LOADOUT_A_CAP4},
+		{VarbitID.RUNE_POUCH_LOADOUT_B_CAP1, VarbitID.RUNE_POUCH_LOADOUT_B_CAP2, VarbitID.RUNE_POUCH_LOADOUT_B_CAP3, VarbitID.RUNE_POUCH_LOADOUT_B_CAP4},
+		{VarbitID.RUNE_POUCH_LOADOUT_C_CAP1, VarbitID.RUNE_POUCH_LOADOUT_C_CAP2, VarbitID.RUNE_POUCH_LOADOUT_C_CAP3, VarbitID.RUNE_POUCH_LOADOUT_C_CAP4},
+		{VarbitID.RUNE_POUCH_LOADOUT_D_CAP1, VarbitID.RUNE_POUCH_LOADOUT_D_CAP2, -1, VarbitID.RUNE_POUCH_LOADOUT_D_CAP4},
+		{VarbitID.RUNE_POUCH_LOADOUT_E_CAP1, VarbitID.RUNE_POUCH_LOADOUT_E_CAP2, VarbitID.RUNE_POUCH_LOADOUT_E_CAP3, VarbitID.RUNE_POUCH_LOADOUT_E_CAP4},
+		{VarbitID.RUNE_POUCH_LOADOUT_F_CAP1, VarbitID.RUNE_POUCH_LOADOUT_F_CAP2, VarbitID.RUNE_POUCH_LOADOUT_F_CAP3, VarbitID.RUNE_POUCH_LOADOUT_F_CAP4},
+		{VarbitID.RUNE_POUCH_LOADOUT_G_CAP1, VarbitID.RUNE_POUCH_LOADOUT_G_CAP2, VarbitID.RUNE_POUCH_LOADOUT_G_CAP3, VarbitID.RUNE_POUCH_LOADOUT_G_CAP4},
+		{VarbitID.RUNE_POUCH_LOADOUT_H_CAP1, VarbitID.RUNE_POUCH_LOADOUT_H_CAP2, -1, VarbitID.RUNE_POUCH_LOADOUT_H_CAP4},
+		{VarbitID.RUNE_POUCH_LOADOUT_I_CAP1, VarbitID.RUNE_POUCH_LOADOUT_I_CAP2, VarbitID.RUNE_POUCH_LOADOUT_I_CAP3, VarbitID.RUNE_POUCH_LOADOUT_I_CAP4},
+		{VarbitID.RUNE_POUCH_LOADOUT_J_CAP1, VarbitID.RUNE_POUCH_LOADOUT_J_CAP2, VarbitID.RUNE_POUCH_LOADOUT_J_CAP3, VarbitID.RUNE_POUCH_LOADOUT_J_CAP4},
 	};
 
 	private final Client client;
@@ -667,7 +689,7 @@ class RunePouchGridManager
 			// full label goes directly into Action instead.
 			runeIcon.setHasListener(true);
 			runeIcon.clearActions();
-			runeIcon.setAction(0, "Change " + Text.removeTags(original.getName()));
+			runeIcon.setAction(0, "Change " + Text.removeTags(original.getName()) + runeCapSuffix(slotIndex, i));
 			runeIcon.setOnOpListener((JavaScriptCallback) (ScriptEvent event) ->
 			{
 				if (event.getOp() != 1)
@@ -680,6 +702,23 @@ class RunePouchGridManager
 			});
 			runeIcon.revalidate();
 		}
+	}
+
+	/**
+	 * " (1,000)" when this rune position has a specific saved quantity cap,
+	 * or "" when it's unlimited ("All", cap 0) or the cap can't be read
+	 * (RUNE_CAP_VARBIT_IDS entry -1 — see its javadoc).
+	 */
+	private String runeCapSuffix(int slotIndex, int position)
+	{
+		int[] caps = RUNE_CAP_VARBIT_IDS[slotIndex];
+		if (position >= caps.length || caps[position] == -1)
+		{
+			return "";
+		}
+
+		int cap = client.getVarbitValue(caps[position]);
+		return cap > 0 ? String.format(" (%,d)", cap) : "";
 	}
 
 	private Widget getOrCreateOwned(Widget parent, String tag, int type)
