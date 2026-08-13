@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew run *)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/WidgetPositionMode.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/WidgetSizeMode.java\")"
+    ]
+  }
+}

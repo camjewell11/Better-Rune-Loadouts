@@ -3,8 +3,9 @@
 A RuneLite plugin. (TODO: describe what it does.)
 
 Scaffolded from the same structure as [Boss Tracker](https://github.com/camjewell11/BossingInfo) —
-package `com.camjewell.betterruneloadouts`, Java 11 target, Gson/OkHttp/gameval conventions per
-`CLAUDE.md`.
+package `com.camjewell.betterruneloadouts`, Java 11 target
+
+Credit to SheeplerSN on reddit for the mockup.
 
 ## Building
 
