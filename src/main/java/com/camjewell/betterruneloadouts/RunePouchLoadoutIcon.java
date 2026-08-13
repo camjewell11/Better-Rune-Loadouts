@@ -10,7 +10,10 @@ import net.runelite.api.gameval.SpriteID;
  */
 class RunePouchLoadoutIcon
 {
-	static final int DEFAULT_SPRITE_ID = SpriteID.AccManIcons._6;
+	// Shown when a loadout has no custom icon set. Uses the same "X" sprite
+	// as the empty-icon-slot placeholder so the picker's "Default" preview
+	// matches what unselecting actually shows, rather than an unrelated icon.
+	static final int DEFAULT_SPRITE_ID = SpriteID.FavouriteIcons.REMOVE;
 	static final int NO_SECOND_ICON = -1;
 
 	final int spriteId;
@@ -36,7 +39,7 @@ class RunePouchLoadoutIcon
 	}
 
 	static final List<RunePouchLoadoutIcon> ICONS = List.of(
-		new RunePouchLoadoutIcon(SpriteID.AccManIcons._6, "Default"),
+		new RunePouchLoadoutIcon(DEFAULT_SPRITE_ID, "Default"),
 
 		new RunePouchLoadoutIcon(SpriteID.Magicon.WIND_STRIKE, "Wind Strike"),
 		new RunePouchLoadoutIcon(SpriteID.Magicon.WATER_STRIKE, "Water Strike"),
@@ -158,6 +161,15 @@ class RunePouchLoadoutIcon
 		new RunePouchLoadoutIcon(SpriteID.LunarMagicOn.SPELLBOOK_SWAP, "Spellbook Swap"),
 		new RunePouchLoadoutIcon(SpriteID.LunarMagicOn.DREAM, "Dream"),
 
+		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn.RESURRECT_LESSER_GHOST, "Resurrect Lesser Ghost"),
+		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn._24, "Resurrect Lesser Skeleton"),
+		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn._25, "Resurrect Lesser Zombie"),
+		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn._44, "Resurrect Superior Ghost"),
+		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn.RESURRECT_SUPERIOR_SKELETON, "Resurrect Superior Skeleton"),
+		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn._48, "Resurrect Superior Zombie"),
+		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn._45, "Resurrect Greater Ghost"),
+		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn._47, "Resurrect Greater Skeleton"),
+		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn.RESURRECT_GREATER_ZOMBIE, "Resurrect Greater Zombie"),
 		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn.ADEPT_REANIMATION, "Adept Reanimation"),
 		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn.BASIC_REANIMATION, "Basic Reanimation"),
 		new RunePouchLoadoutIcon(SpriteID.MagicNecroOn.EXPERT_REANIMATION, "Expert Reanimation"),

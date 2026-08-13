@@ -20,6 +20,7 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.chatbox.ChatboxPanelManager;
+import net.runelite.client.game.chatbox.ChatboxTextInput;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.util.ColorUtil;
@@ -34,7 +35,10 @@ import net.runelite.client.util.Text;
 public class BetterRuneLoadoutsPlugin extends Plugin
 {
 	private static final String RENAME_PROMPT_FORMAT = "%s<br>" + ColorUtil.prependColorTag("(Limit %s Characters)", new Color(0, 0, 170));
-	private static final int RENAME_CHARACTER_LIMIT = 40;
+	// The grid's name strip is much narrower than vanilla's original
+	// full-width single-column row it was sized for — anything past ~10
+	// characters overflows off the edge of the cell.
+	private static final int RENAME_CHARACTER_LIMIT = 10;
 
 	@Inject
 	private Client client;
@@ -72,6 +76,7 @@ public class BetterRuneLoadoutsPlugin extends Plugin
 	protected void startUp()
 	{
 		gridManager.setRenameRequestHandler(this::renameLoadout);
+		gridManager.setIconChangeRequestHandler(this::changeLoadoutIcon);
 
 		clientThread.invokeLater(() ->
 		{
@@ -220,8 +225,10 @@ public class BetterRuneLoadoutsPlugin extends Plugin
 	private void renameLoadout(int slotIndex)
 	{
 		String currentName = gridManager.getLoadoutName(slotIndex);
-		chatboxPanelManager.openTextInput(String.format(RENAME_PROMPT_FORMAT, "Loadout name", RENAME_CHARACTER_LIMIT))
-			.value(Strings.nullToEmpty(currentName))
+		ChatboxTextInput input = chatboxPanelManager.openTextInput(
+			String.format(RENAME_PROMPT_FORMAT, "Loadout name", RENAME_CHARACTER_LIMIT));
+		input.addCharValidator(c -> input.getValue().length() < RENAME_CHARACTER_LIMIT);
+		input.value(Strings.nullToEmpty(currentName))
 			.onDone((newName) ->
 			{
 				if (newName == null)

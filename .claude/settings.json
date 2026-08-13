@@ -8,7 +8,13 @@
       "Read(//tmp/**)",
       "Read(//c/tmp/**)",
       "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/Widget.java\")",
-      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/ItemQuantityMode.java\")"
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/widgets/ItemQuantityMode.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/MenuAction.java\")",
+      "Bash(curl -s \"https://api.github.com/search/code?q=CC_OP+menuAction+repo:runelite/runelite\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-api/src/main/java/net/runelite/api/MenuEntry.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-client/src/main/java/net/runelite/client/plugins/devtools/WidgetInspector.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-client/src/main/java/net/runelite/client/game/chatbox/ChatboxTextInput.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/runelite/runelite/master/runelite-client/src/main/java/net/runelite/client/game/chatbox/ChatboxPanelManager.java\")"
     ]
   }
 }

@@ -90,9 +90,16 @@ class RunePouchLoadoutIconPicker extends ChatboxInput
 
 		List<RunePouchLoadoutIcon> icons = RunePouchLoadoutIcon.search(searchText);
 
-		int columns = RunePouchGridConst.ICON_PICKER_COLUMNS;
 		int iconSize = RunePouchGridConst.ICON_PICKER_ICON_SIZE;
 		int spacing = RunePouchGridConst.ICON_PICKER_ICON_SPACING;
+
+		// Resizable layout gives a much wider chatbox than fixed/classic — a
+		// hardcoded column count left most of that width empty. Fill however
+		// much room is actually available instead.
+		int availableWidth = scrollArea.getWidth();
+		int columns = availableWidth > 0
+			? Math.max(1, availableWidth / (iconSize + spacing))
+			: RunePouchGridConst.ICON_PICKER_COLUMNS;
 
 		int totalRows = icons.size() / columns + 1;
 		int scrollHeight = Math.max(0, totalRows * (iconSize + spacing) + spacing);

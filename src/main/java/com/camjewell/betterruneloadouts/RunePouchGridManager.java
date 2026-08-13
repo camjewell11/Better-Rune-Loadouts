@@ -4,12 +4,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
+import net.runelite.api.MenuAction;
 import net.runelite.api.ScriptEvent;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.ItemQuantityMode;
@@ -18,6 +20,7 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetPositionMode;
 import net.runelite.api.widgets.WidgetSizeMode;
 import net.runelite.api.widgets.WidgetType;
+import net.runelite.client.util.Text;
 
 /**
  * Reflows the rune pouch loadout list (RUNEPOUCH_LOADOUT_A..J) from vanilla's
@@ -80,9 +83,18 @@ class RunePouchGridManager
 	private final RunePouchLoadoutConfigStore configStore;
 
 	private final Map<Integer, int[]> originalGeometry = new HashMap<>();
+	// Widgets we've created ourselves (theme icons, rune icons), keyed by
+	// "parentWidgetId:tag" so we can find-and-reuse them across refreshes
+	// without relying on the Name field — which turned out to double as
+	// (part of) the hover/menu text for dynamically-created children, unlike
+	// native widgets where TargetVerb handles that separately. Reference
+	// identity (not Name) is also how we tell "ours" apart from vanilla's
+	// own children when hiding/restoring.
+	private final Map<String, Widget> ownedWidgets = new HashMap<>();
 	private boolean gridApplied;
 	private int currentViewValue;
 	private IntConsumer renameRequestHandler;
+	private BiConsumer<Integer, Integer> iconChangeRequestHandler;
 
 	@Inject
 	RunePouchGridManager(Client client, RunePouchLoadoutConfigStore configStore)
@@ -100,9 +112,27 @@ class RunePouchGridManager
 		this.renameRequestHandler = handler;
 	}
 
+	/**
+	 * Called when the user clicks a loadout's theme icon slot (slotIndex,
+	 * layer). Wired by the plugin since opening the icon picker lives there.
+	 */
+	void setIconChangeRequestHandler(BiConsumer<Integer, Integer> handler)
+	{
+		this.iconChangeRequestHandler = handler;
+	}
+
 	void applyGrid(int viewValue)
 	{
 		this.currentViewValue = viewValue;
+
+		// A fresh panel open rebuilds the interface from scratch, so any
+		// widgets we created last time are gone even if this map still
+		// references them — start clean. Calls from refresh() (gridApplied
+		// already true) intentionally skip this to reuse what's there.
+		if (!gridApplied)
+		{
+			ownedWidgets.clear();
+		}
 
 		Widget container = client.getWidget(InterfaceID.Bankside.RUNEPOUCH_LOADOUT_CONTAINER);
 		if (container == null)
@@ -207,16 +237,14 @@ class RunePouchGridManager
 
 			for (Widget child : children)
 			{
-				String name = child.getName();
-				boolean isOurs = ICON_CHILD_NAME.equals(name) || LAYER_CHILD_NAME.equals(name)
-					|| (name != null && name.startsWith(RUNE_ICON_CHILD_PREFIX));
-
+				boolean isOurs = ownedWidgets.containsValue(child);
 				child.setHidden(isOurs);
 				child.revalidate();
 			}
 		}
 
 		originalGeometry.clear();
+		ownedWidgets.clear();
 		gridApplied = false;
 	}
 
@@ -345,29 +373,31 @@ class RunePouchGridManager
 		// the loadout cell instead (a sibling, not nested in the button)
 		// avoids that entirely — this widget has no competing hover behavior.
 		int buttonTop = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP;
-		int iconY = buttonTop + (RunePouchGridConst.LOAD_BUTTON_HEIGHT - RunePouchGridConst.CUSTOM_ICON_SIZE) / 2;
+		int iconY = buttonTop;
 		int iconX = RunePouchGridConst.THEME_ICON_X;
 
-		applyIconSlot(loadoutWidget, ICON_CHILD_NAME, iconX, iconY, RunePouchGridConst.CUSTOM_ICON_SIZE, primarySprite, isCustomPrimary);
+		applyIconSlot(loadoutWidget, ICON_CHILD_NAME, iconX, iconY, RunePouchGridConst.CUSTOM_ICON_SIZE, primarySprite, isCustomPrimary, slotIndex, 0);
 
 		// Same size, side by side — not stacked on the primary icon.
 		int layerX = iconX + RunePouchGridConst.CUSTOM_ICON_SIZE + RunePouchGridConst.CUSTOM_ICON_GUTTER;
-		applyIconSlot(loadoutWidget, LAYER_CHILD_NAME, layerX, iconY, RunePouchGridConst.CUSTOM_ICON_SIZE, layerSprite, hasLayer);
+		applyIconSlot(loadoutWidget, LAYER_CHILD_NAME, layerX, iconY, RunePouchGridConst.CUSTOM_ICON_SIZE, layerSprite, hasLayer, slotIndex, 1);
 	}
 
 	/**
 	 * Renders one custom icon slot — the real sprite when set, or vanilla's
 	 * own "no rune assigned" item icon (11526) as a placeholder when not, so
-	 * it reads the same as the rest of this interface.
+	 * it reads the same as the rest of this interface. Clicking (either
+	 * button, matching how a single action shows for both) opens the icon
+	 * picker for this slot/layer.
 	 *
 	 * TODO: a backdrop panel behind the slot (so it's visible even before
 	 * being set) would help, but RECTANGLE children attached here didn't
 	 * render under any configuration tried (outline or filled) despite every
 	 * GRAPHIC child working fine — needs more investigation, not a quick fix.
 	 */
-	private void applyIconSlot(Widget parent, String iconName, int x, int y, int size, int spriteId, boolean isSet)
+	private void applyIconSlot(Widget parent, String tag, int x, int y, int size, int spriteId, boolean isSet, int slotIndex, int layer)
 	{
-		Widget icon = findOrCreateTaggedChild(parent, iconName);
+		Widget icon = getOrCreateOwned(parent, tag, WidgetType.GRAPHIC);
 		if (isSet)
 		{
 			icon.setSpriteId(spriteId);
@@ -391,6 +421,30 @@ class RunePouchGridManager
 		icon.setOriginalX(x);
 		icon.setOriginalY(y);
 		icon.setHidden(false);
+
+		// TargetVerb doesn't concatenate onto Action for dynamically-created
+		// children the way it does for native widgets (confirmed against our
+		// own icon picker, which puts the whole label in Action alone and
+		// displays correctly) — so put the full text in Action directly.
+		// Two actions on one widget show as two right-click menu rows, with
+		// op 1 (the first) also firing on a plain left-click.
+		icon.setHasListener(true);
+		icon.clearActions();
+		icon.setAction(0, "Change icon");
+		icon.setAction(1, "Reset icon");
+		icon.setOnOpListener((JavaScriptCallback) (ScriptEvent event) ->
+		{
+			int op = event.getOp();
+			if (op == 1 && iconChangeRequestHandler != null)
+			{
+				iconChangeRequestHandler.accept(slotIndex, layer);
+			}
+			else if (op == 2)
+			{
+				configStore.resetIcon(currentViewValue, slotIndex, layer);
+				refresh();
+			}
+		});
 		icon.revalidate();
 	}
 
@@ -401,7 +455,9 @@ class RunePouchGridManager
 	 * them sticks, but any reposition we apply gets silently overwritten.
 	 * So instead: read which item each one shows (before hiding it), then
 	 * draw our own replacement icons — plain widgets vanilla's script has no
-	 * reason to touch — in a compact grid beside the load button.
+	 * reason to touch — in a compact grid to the right of the theme icons.
+	 * Each replacement forwards clicks to the original (still-present, just
+	 * hidden) widget's own action, so the vanilla rune picker still opens.
 	 */
 	private void compactRuneIcons(int slotIndex)
 	{
@@ -417,12 +473,10 @@ class RunePouchGridManager
 			return;
 		}
 
-		List<Integer> itemIds = new ArrayList<>();
+		List<Widget> originals = new ArrayList<>();
 		for (Widget child : children)
 		{
-			String name = child.getName();
-			if (ICON_CHILD_NAME.equals(name) || LAYER_CHILD_NAME.equals(name)
-				|| (name != null && name.startsWith(RUNE_ICON_CHILD_PREFIX)))
+			if (ownedWidgets.containsValue(child))
 			{
 				continue;
 			}
@@ -432,30 +486,34 @@ class RunePouchGridManager
 			// populated slot (e.g. 565 = Blood rune) from an empty one (-1).
 			if (child.getItemId() >= 0)
 			{
-				itemIds.add(child.getItemId());
+				originals.add(child);
 			}
 
 			child.setHidden(true);
 			child.revalidate();
 		}
 
+		int buttonTop = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP;
+
 		for (int i = 0; i < RunePouchGridConst.RUNE_ICON_MAX_SLOTS; i++)
 		{
-			Widget runeIcon = findOrCreateTaggedChild(loadoutWidget, RUNE_ICON_CHILD_PREFIX + i);
+			Widget runeIcon = getOrCreateOwned(loadoutWidget, RUNE_ICON_CHILD_PREFIX + i, WidgetType.GRAPHIC);
 
-			if (i >= itemIds.size())
+			if (i >= originals.size())
 			{
+				runeIcon.setHasListener(false);
 				runeIcon.setHidden(true);
 				runeIcon.revalidate();
 				continue;
 			}
 
-			// Single row beneath the load button / theme icon row, matching
-			// the mockup, rather than a grid beside it.
-			int runeRowY = RunePouchGridConst.NAME_HEIGHT + RunePouchGridConst.ROW_TOP_GAP
-				+ RunePouchGridConst.LOAD_BUTTON_HEIGHT + RunePouchGridConst.RUNE_ROW_GAP;
+			Widget original = originals.get(i);
 
-			runeIcon.setItemId(itemIds.get(i));
+			// Single row starting at the same X as the theme icons (to the
+			// right of the load button), below the theme-icon row.
+			int runeRowY = buttonTop + RunePouchGridConst.CUSTOM_ICON_SIZE + RunePouchGridConst.RUNE_ROW_GAP;
+
+			runeIcon.setItemId(original.getItemId());
 			runeIcon.setItemQuantity(1);
 			runeIcon.setItemQuantityMode(ItemQuantityMode.NEVER);
 			runeIcon.setWidthMode(WidgetSizeMode.ABSOLUTE);
@@ -464,34 +522,45 @@ class RunePouchGridManager
 			runeIcon.setOriginalHeight(RunePouchGridConst.RUNE_ICON_SIZE);
 			runeIcon.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
 			runeIcon.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
-			runeIcon.setOriginalX(i * (RunePouchGridConst.RUNE_ICON_SIZE + RunePouchGridConst.RUNE_ICON_GUTTER));
+			runeIcon.setOriginalX(RunePouchGridConst.RUNE_AREA_X
+				+ i * (RunePouchGridConst.RUNE_ICON_SIZE + RunePouchGridConst.RUNE_ICON_GUTTER));
 			runeIcon.setOriginalY(runeRowY);
 			runeIcon.setHidden(false);
+
+			// Vanilla's own click action opens its native rune picker on the
+			// original widget; forward clicks on our replacement there
+			// instead of trying to reimplement or guess at that behavior.
+			// TargetVerb doesn't concatenate onto Action for dynamically
+			// created children the way it does for native widgets, so the
+			// full label goes directly into Action instead.
+			runeIcon.setHasListener(true);
+			runeIcon.clearActions();
+			runeIcon.setAction(0, "Change " + Text.removeTags(original.getName()));
+			runeIcon.setOnOpListener((JavaScriptCallback) (ScriptEvent event) ->
+			{
+				if (event.getOp() != 1)
+				{
+					return;
+				}
+
+				client.menuAction(original.getIndex(), original.getId(), MenuAction.CC_OP,
+					1, original.getItemId(), "Change", "");
+			});
 			runeIcon.revalidate();
 		}
 	}
 
-	private static Widget findOrCreateTaggedChild(Widget parent, String name)
+	private Widget getOrCreateOwned(Widget parent, String tag, int type)
 	{
-		return findOrCreateTaggedChild(parent, name, WidgetType.GRAPHIC);
-	}
-
-	private static Widget findOrCreateTaggedChild(Widget parent, String name, int type)
-	{
-		Widget[] children = parent.getDynamicChildren();
-		if (children != null)
+		String key = parent.getId() + ":" + tag;
+		Widget cached = ownedWidgets.get(key);
+		if (cached != null)
 		{
-			for (Widget child : children)
-			{
-				if (name.equals(child.getName()))
-				{
-					return child;
-				}
-			}
+			return cached;
 		}
 
 		Widget created = parent.createChild(-1, type);
-		created.setName(name);
+		ownedWidgets.put(key, created);
 		return created;
 	}
 
