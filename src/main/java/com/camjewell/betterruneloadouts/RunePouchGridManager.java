@@ -172,6 +172,14 @@ class RunePouchGridManager
 		applyGrid(currentViewValue);
 	}
 
+	/**
+	 * Reverts everything applyGrid() touched: geometry of the native
+	 * loadout/load/name widgets, our own created child widgets (hidden, since
+	 * there's no per-child removal API — only deleteAllChildren(), which
+	 * would also wipe vanilla's own children of the same parent), and
+	 * visibility of vanilla's rune-icon children that compactRuneIcons()
+	 * hid. Idempotent and safe to call even if the panel already closed.
+	 */
 	void restoreNativeLayout()
 	{
 		if (!gridApplied)
@@ -179,28 +187,60 @@ class RunePouchGridManager
 			return;
 		}
 
+		restoreGeometry(LOADOUT_WIDGET_IDS);
+		restoreGeometry(LOAD_WIDGET_IDS);
+		restoreGeometry(NAME_WIDGET_IDS);
+
 		for (int widgetId : LOADOUT_WIDGET_IDS)
 		{
-			Widget loadout = client.getWidget(widgetId);
-			int[] original = originalGeometry.get(widgetId);
-			if (loadout == null || original == null)
+			Widget loadoutWidget = client.getWidget(widgetId);
+			if (loadoutWidget == null)
 			{
 				continue;
 			}
 
-			loadout.setXPositionMode(original[0]);
-			loadout.setYPositionMode(original[1]);
-			loadout.setWidthMode(original[2]);
-			loadout.setHeightMode(original[3]);
-			loadout.setOriginalX(original[4]);
-			loadout.setOriginalY(original[5]);
-			loadout.setOriginalWidth(original[6]);
-			loadout.setOriginalHeight(original[7]);
-			loadout.revalidate();
+			Widget[] children = loadoutWidget.getDynamicChildren();
+			if (children == null)
+			{
+				continue;
+			}
+
+			for (Widget child : children)
+			{
+				String name = child.getName();
+				boolean isOurs = ICON_CHILD_NAME.equals(name) || LAYER_CHILD_NAME.equals(name)
+					|| (name != null && name.startsWith(RUNE_ICON_CHILD_PREFIX));
+
+				child.setHidden(isOurs);
+				child.revalidate();
+			}
 		}
 
 		originalGeometry.clear();
 		gridApplied = false;
+	}
+
+	private void restoreGeometry(int[] widgetIds)
+	{
+		for (int widgetId : widgetIds)
+		{
+			Widget widget = client.getWidget(widgetId);
+			int[] original = originalGeometry.get(widgetId);
+			if (widget == null || original == null)
+			{
+				continue;
+			}
+
+			widget.setXPositionMode(original[0]);
+			widget.setYPositionMode(original[1]);
+			widget.setWidthMode(original[2]);
+			widget.setHeightMode(original[3]);
+			widget.setOriginalX(original[4]);
+			widget.setOriginalY(original[5]);
+			widget.setOriginalWidth(original[6]);
+			widget.setOriginalHeight(original[7]);
+			widget.revalidate();
+		}
 	}
 
 	String getLoadoutName(int slotIndex)
@@ -223,6 +263,7 @@ class RunePouchGridManager
 
 		String name = getLoadoutName(slotIndex);
 
+		cacheOriginalGeometry(nameWidget);
 		nameWidget.setHidden(false);
 		nameWidget.setType(WidgetType.TEXT);
 		nameWidget.setFontId(FontID.PLAIN_12);
@@ -280,6 +321,7 @@ class RunePouchGridManager
 		// Vanilla anchors this near the top of its original (shorter,
 		// full-width) row. Pin it explicitly below our name strip so it
 		// doesn't overlap that widget's clickable area.
+		cacheOriginalGeometry(loadWidget);
 		loadWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
 		loadWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
 		loadWidget.setWidthMode(WidgetSizeMode.ABSOLUTE);
